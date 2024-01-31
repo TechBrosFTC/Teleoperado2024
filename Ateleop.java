@@ -51,11 +51,12 @@ Orientation angles;
 double velocidade;
 double mecanum;
 double girar;
+double x;
+double y;
+
 boolean redução;
 boolean matheus;
 boolean garra;
-double x;
-double y;
 
 
     public void runOpMode() {
@@ -66,60 +67,73 @@ double y;
         DireitaFrente = hardwareMap.get(DcMotorEx.class,"DireitaFrente");
         EsquerdaFrente = hardwareMap.get(DcMotorEx.class,"EsquerdaFrente");
         SensorDistancia = hardwareMap.get(DistanceSensor.class, "SensorDistancia");
+        /*
+        ***
+        Usar nas fases de teste porque este valor deve ser continuado após o autonomo
+        ***
+        */
         Braço = hardwareMap.get(DcMotorEx.class,"Braço");
+        Braço.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER); //reset encoder
+        Braço.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        
         BraçoEsquerda = hardwareMap.get(DcMotorEx.class,"BraçoEsquerda");
+        BraçoEsquerda.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER); //reset encoder
+        BraçoEsquerda.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER); //RUN_TO_POSITION
+         
         Aviao = hardwareMap.get(Servo.class,"Aviao");
         BNO055IMU.Parameters parameters = new BNO055IMU.Parameters();
         parameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         telemetry.addData("Aguardando", "Start");
+        telemetry.addData("X", gamepad1.left_stick_x);
         telemetry.update();
         Aviao.setDirection(Servo.Direction.REVERSE);
         BraçoEsquerda.setDirection(DcMotorEx.Direction.REVERSE);
-        waitForStart();
-        Aviao.setPosition(0.3);
+        EsquerdaFrente.setDirection(DcMotorEx.Direction.REVERSE);
+        Aviao.setPosition(0.2);
+        
+        
+        waitForStart();  ////////start
         //loop principal
+        
         while(opModeIsActive()){
-            
+            if(gamepad1.left_trigger > 0.5){ // Freia o robô
+               power4Rodas(-0.05); continue;
+            }
 ///////////// MECANUM /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-           if(gamepad1.left_stick_y > 0 && 13.5 >  SensorDistancia.getDistance(DistanceUnit.CM)){
-               continue;
-           }
-            if(gamepad1.left_bumper == true && matheus == false){
-                matheus = true;
+            if(gamepad1.left_stick_y > 0 && 13.5 >  SensorDistancia.getDistance(DistanceUnit.CM)){
+               continue; 
             }
-            
-            if(gamepad1.left_bumper == true && matheus == true){
-                matheus = false;
+            if(gamepad1.left_stick_y > 0 && gamepad1.left_stick_x > -0.35 && gamepad1.left_stick_x < 0.35 ){
+                power4Rodas(velocidade);
             }
+            if ((gamepad1.left_stick_y < 0.05 && gamepad1.left_stick_y > -0.05) && (gamepad1.left_stick_x < 0.05 && gamepad1.left_stick_x > -0.05)){
+                power4Rodas(0.015);
+            }
+
+            if(gamepad1.left_bumper == true && matheus == false) matheus = true;           
             
-           if(matheus == true && SensorDistancia.getDistance(DistanceUnit.CM) > 12) {
-            matheus = false;
-           DireitaFrente.setPower(0.5);
-           EsquerdaFrente.setPower(0.5);
-           DireitaTras.setPower(0.5);
-           EsquerdaTras.setPower(0.5);
-           }
-            
+            if(gamepad1.left_bumper == true && matheus == true) matheus = false;
+           
             velocidade = -gamepad1.left_stick_y;
             mecanum = gamepad1.left_stick_x;
             girar = gamepad1.right_stick_x;
             
-            x = 0.7;
-            y = 0.4;
+            x = 1;
+            y = 0.5;
             
             if(redução == true){
-                DireitaFrente.setPower((velocidade - mecanum - girar)*y);
-                EsquerdaFrente.setPower((velocidade - mecanum + girar)*-y);
-                DireitaTras.setPower((velocidade + mecanum - girar)*y);
-                EsquerdaTras.setPower((velocidade + mecanum + girar)*y);
-            }
-            else{
-                DireitaFrente.setPower((velocidade - mecanum - girar)*x);
-                EsquerdaFrente.setPower((velocidade - mecanum + girar)*-x);
-                DireitaTras.setPower((velocidade + mecanum - girar)*x);
-                EsquerdaTras.setPower((velocidade + mecanum + girar)*x);   
+                powerMecanum(y);
+                
+            }else{
+                powerMecanum(x);
             }
             
+            if(SensorDistancia.getDistance(DistanceUnit.CM) < 50){
+                powerMecanum(0.2);
+            }
+            if(SensorDistancia.getDistance(DistanceUnit.CM) < 5){
+                powerMecanum(-0.05);
+            }
 /////////////Redução ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             if (redução == true && gamepad1.y == true){
                 redução = false;
@@ -132,53 +146,88 @@ double y;
             }
 //////////// BRAÇO /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             //braço estava muito rapido
-            double b = 0.3;
-            if(gamepad2.b == true && Braço.getCurrentPosition() < -600 ){
+            double a = 0.3;
+            double b = 0.4;
+            
+            if (gamepad2.a == true && Braço.getCurrentPosition() >= 0){//não deixa forçar no solo
+                Braço.setPower(0.02);
+                BraçoEsquerda.setPower(0.02);
                 continue;
             }
+            if (gamepad2.a == true && Braço.getCurrentPosition() >-200){//não deixa forçar no solo
+                power4Rodas(-0.25);
+            }
+            if (Braço.getCurrentPosition() >-200){ //reduziu enquanto está mais baixo
+                 redução = true;
+            }
+             if (Braço.getCurrentPosition() <-200 && Braço.getCurrentPosition() >-300 ){ //reduziu enquanto está mais baixo
+                 redução = false;
+             }
+            if (gamepad2.a == true && Braço.getCurrentPosition() < -300){////positivo é para baixo 
+                Braço.setPower(a);
+                BraçoEsquerda.setPower(a);
+            }
+            if(gamepad2.a == true && Braço.getCurrentPosition() >= -300){
+                Braço.setPower(-0.1);
+                BraçoEsquerda.setPower(-0.1); 
+                Braço.setPower(a*0.5);//50% da pot 
+                BraçoEsquerda.setPower(a*0.5);//50% da pot
+                if(Braço.getCurrentPosition() < -100) power4Rodas(-0.1); // ré apenas entre -400 e -100
+            }
             
-            if(gamepad2.a == true && Braço.getCurrentPosition() > 500 ){
+            if(gamepad2.right_trigger > 0.5){ // Deixa garra em -330
+                if (Braço.getCurrentPosition() > -330 ){
+                    Braço.setPower(-0.2);
+                    BraçoEsquerda.setPower(-0.2);   
+                }else{
+                    Braço.setPower(0.2);
+                    BraçoEsquerda.setPower(0.2); 
+                }
+                if (Braço.getCurrentPosition() < -330 && Braço.getCurrentPosition() > -400){
+                    Braço.setPower(-0.02);
+                    BraçoEsquerda.setPower(-0.02);
+                }
+            }
+            
+            if (gamepad2.b == true && Braço.getCurrentPosition() <= -1080){//não deixa forçar a possição da entrega
+                Braço.setPower(0.015);
+                BraçoEsquerda.setPower(0.015);
                 continue;
             }
-            
-            if (gamepad2.a == true){////positivo é para baixo
-            Braço.setPower(b);
-            BraçoEsquerda.setPower(b);
+            if (gamepad2.b == true && Braço.getCurrentPosition() > -700 ){
+                Braço.setPower(-b);
+                BraçoEsquerda.setPower(-b);
+            }
+            else{
+                if (gamepad2.b == true && Braço.getCurrentPosition() <= -700){
+                    Braço.setPower(-b*0.5);
+                    BraçoEsquerda.setPower(-b*0.5);
+                }
             }
             
-            if (gamepad2.b == true){
-            Braço.setPower(-b);
-            BraçoEsquerda.setPower(-b);
-            } 
-            //karol pediu para diminuir a velo no final
-            else if (gamepad2.b && Braço.getCurrentPosition() <  -300){
-                Braço.setPower(-b*0.5);
-            }
-            
-            if(gamepad2.b == false && gamepad2.a == false){
-                Braço.setPower(-0.015);
-                BraçoEsquerda.setPower(-0.015);
+            if(gamepad2.b == false && gamepad2.a == false && gamepad2.right_trigger < 0.5){ //trava o motor na posição
+                if (Braço.getCurrentPosition() > -900){
+                    Braço.setPower(-0.015);
+                    BraçoEsquerda.setPower(-0.015); 
+                }else{
+                    Braço.setPower(0.015);
+                    BraçoEsquerda.setPower(0.015); 
+                }
             }
            
-            ////////////////////////////////////
-           //pq tem um avião aqui?????????  / ele faz parte da garra na minha cabeça /
-            if (gamepad2.y == true){
-            Aviao.setPosition (0.5);
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+           if (gamepad2.y == true){
+                Aviao.setPosition (0.5);
             }
-            //////////////////////////////////
-            if (gamepad2.x == true && garra == false){
-                garra = true;
-            }
-             if (gamepad2.x == true && garra == true){
-                garra = false;
-            }
-            if (garra == true && Braço.getCurrentPosition() < -520){
-                garra = false;
-                sleep(200);
-            }
-            if (garra == true && Braço.getCurrentPosition() >-500){
-                Braço.setPower(-b);
-              
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            if (gamepad2.x == true){ //abaixa a garra e reseta o encoder 
+                Braço.setPower(0.4);
+                BraçoEsquerda.setPower(0.4);
+                power4Rodas(-0.2);
+                Braço.setPower(0.1);
+                BraçoEsquerda.setPower(0.1);
+                Braço.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER); //reset encoder
+                Braço.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
             }
             
 ////////////// TELEMETRIA ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////            
@@ -193,10 +242,24 @@ double y;
             telemetry.update();
         }
     }
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
+   //Seta potencias iguais(p) as 4 rodas do robo
+    void power4Rodas(double p){
+        DireitaFrente.setPower(p);
+        EsquerdaFrente.setPower(p);
+        DireitaTras.setPower(p);
+        EsquerdaTras.setPower(p);
+    }
     
-    
-   void composeTelemetry() {
-    
+    //Seta as rodas para reberem power em movimento mecanum vezes um limitador(l)
+    void powerMecanum(double l){
+        DireitaFrente.setPower((velocidade - mecanum - girar)*l);
+        EsquerdaFrente.setPower((velocidade - mecanum + girar)*l);
+        DireitaTras.setPower((velocidade + mecanum - girar)*l);
+        EsquerdaTras.setPower((velocidade + mecanum + girar)*l);
+    }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////    
+    void composeTelemetry() {
         // At the beginning of each telemetry update, grab a bunch of data
         // from the IMU that we will then display in separate lines.
         telemetry.addAction(new Runnable() { @Override public void run()
